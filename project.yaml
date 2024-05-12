@@ -1,0 +1,51 @@
+Resources:
+  PortellaVPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: 10.42.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: PortellaVPC
+  
+  PortellaSubnet:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref PortellaVPC
+      CidrBlock: 10.42.0.0/24
+      AvailabilityZone: us-east-1a
+      Tags:
+        - Key: Name
+          Value: PortellaSubnet
+  
+  AppSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Default security group for the CloudProject
+      VpcId: !Ref PortellaVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: 0.0.0.0/0
+
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+    
+  PortellaInstance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      InstanceType: t2.micro
+      AvailabilityZone: us-east-1a
+      ImageId: ami-04b70fa74e45c3917
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          DeviceIndex: '0'
+          GroupSet:
+            - !Ref AppSecurityGroup
+          SubnetId: !Ref PortellaSubnet
+      Tags:
+        - Key: Name
+          Value: PortellaInstance
