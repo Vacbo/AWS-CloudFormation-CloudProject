@@ -9,15 +9,66 @@ Resources:
         - Key: Name
           Value: PortellaVPC
   
-  PortellaSubnet:
+  PortellaSubnet1:
     Type: 'AWS::EC2::Subnet'
     Properties:
       VpcId: !Ref PortellaVPC
       CidrBlock: 10.42.0.0/24
-      AvailabilityZone: us-east-1a
+      AvailabilityZone: !Select [0, !GetAZs ""]
       Tags:
         - Key: Name
-          Value: PortellaSubnet
+          Value: PortellaSubnet1
+
+  PortellaSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref PortellaVPC
+      CidrBlock: 10.42.25.0/24
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      Tags:
+        - Key: Name
+          Value: PortellaSubnet2
+
+  PortellaKeypair:
+    Type: 'AWS::EC2::KeyPair'
+    Properties:
+      KeyName: !Sub 'key-${AWS::StackName}'
+      PublicKeyMaterial: "examplekey" 
+
+
+  PortellaGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref PortellaVPC
+      InternetGatewayId: !Ref PortellaGateway
+  
+  PortellaRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref PortellaVPC
+
+  PortellaRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PortellaRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref PortellaGateway
+
+  PortellaSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PortellaSubnet1
+      RouteTableId: !Ref PortellaRouteTable
+
+  PortellaSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PortellaSubnet2
+      RouteTableId: !Ref PortellaRouteTable
   
   AppSecurityGroup:
     Type: 'AWS::EC2::SecurityGroup'
@@ -34,18 +85,35 @@ Resources:
         - IpProtocol: '-1'
           CidrIp: 0.0.0.0/0
     
-  PortellaInstance:
+  PortellaEC2Instance:
     Type: 'AWS::EC2::Instance'
     Properties:
       InstanceType: t2.micro
-      AvailabilityZone: us-east-1a
+      AvailabilityZone: !Select [0, !GetAZs ""]
       ImageId: ami-04b70fa74e45c3917
+      KeyName: !Ref PortellaKeypair
       NetworkInterfaces:
         - AssociatePublicIpAddress: true
           DeviceIndex: '0'
           GroupSet:
             - !Ref AppSecurityGroup
-          SubnetId: !Ref PortellaSubnet
+          SubnetId: !Ref PortellaSubnet1
       Tags:
         - Key: Name
-          Value: PortellaInstance
+          Value: PortellaEC2Instance
+
+  PortellaDynamoDBTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: MyTable
+      AttributeDefinitions:
+        -
+          AttributeName: id
+          AttributeType: N
+      KeySchema:
+        -
+          AttributeName: id
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
