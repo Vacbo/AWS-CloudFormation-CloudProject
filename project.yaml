@@ -104,16 +104,45 @@ Resources:
 
   PortellaDynamoDBTable:
     Type: 'AWS::DynamoDB::Table'
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
     Properties:
       TableName: MyTable
       AttributeDefinitions:
         -
-          AttributeName: id
-          AttributeType: N
+          AttributeName: Name
+          AttributeType: S
       KeySchema:
         -
-          AttributeName: id
+          AttributeName: Name
           KeyType: HASH
       ProvisionedThroughput:
         ReadCapacityUnits: 5
         WriteCapacityUnits: 5
+
+  DynamoDBAccessRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: DynamoDBAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: dynamodb:*
+                Resource: !GetAtt PortellaDynamoDBTable.Arn
+
+  DynamoDBAccessInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: "/"
+      Roles:
+        - !Ref DynamoDBAccessRole
