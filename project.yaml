@@ -33,7 +33,7 @@ Resources:
     Type: 'AWS::EC2::KeyPair'
     Properties:
       KeyName: !Sub 'key-${AWS::StackName}'
-      PublicKeyMaterial: "examplekey" 
+      PublicKeyMaterial: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA7cKbBR1pZO+SALAqrA17WnOK3ULZVG3AICfQdyJ2RC peportella11@gmail.com" 
 
 
   PortellaGateway:
@@ -80,6 +80,10 @@ Resources:
           FromPort: '22'
           ToPort: '22'
           CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '8000'
+          ToPort: '8000'
+          CidrIp: 0.0.0.0/0
 
       SecurityGroupEgress:
         - IpProtocol: '-1'
@@ -89,6 +93,7 @@ Resources:
     Type: 'AWS::EC2::Instance'
     Properties:
       InstanceType: t2.micro
+      IamInstanceProfile: !Ref DynamoDBAccessInstanceProfile
       AvailabilityZone: !Select [0, !GetAZs ""]
       ImageId: ami-04b70fa74e45c3917
       KeyName: !Ref PortellaKeypair
@@ -104,10 +109,10 @@ Resources:
 
   PortellaDynamoDBTable:
     Type: 'AWS::DynamoDB::Table'
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Retain
+    UpdateReplacePolicy: Delete
+    DeletionPolicy: Delete
     Properties:
-      TableName: MyTable
+      TableName: BolaoTable
       AttributeDefinitions:
         -
           AttributeName: Name
