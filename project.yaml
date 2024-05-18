@@ -33,7 +33,7 @@ Resources:
     Type: 'AWS::EC2::KeyPair'
     Properties:
       KeyName: !Sub 'key-${AWS::StackName}'
-      PublicKeyMaterial: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA7cKbBR1pZO+SALAqrA17WnOK3ULZVG3AICfQdyJ2RC peportella11@gmail.com" 
+      PublicKeyMaterial: !Ref PublicKeyMaterial
 
 
   PortellaGateway:
@@ -83,29 +83,22 @@ Resources:
         - IpProtocol: tcp
           FromPort: '8000'
           ToPort: '8000'
-          CidrIp: 0.0.0.0/0
+          SourceSecurityGroupId: !GetAtt LoadBalancerSecurityGroup.GroupId
 
       SecurityGroupEgress:
         - IpProtocol: '-1'
           CidrIp: 0.0.0.0/0
-    
-  PortellaEC2Instance:
-    Type: 'AWS::EC2::Instance'
+  
+  LoadBalancerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      InstanceType: t2.micro
-      IamInstanceProfile: !Ref DynamoDBAccessInstanceProfile
-      AvailabilityZone: !Select [0, !GetAZs ""]
-      ImageId: ami-04b70fa74e45c3917
-      KeyName: !Ref PortellaKeypair
-      NetworkInterfaces:
-        - AssociatePublicIpAddress: true
-          DeviceIndex: '0'
-          GroupSet:
-            - !Ref AppSecurityGroup
-          SubnetId: !Ref PortellaSubnet1
-      Tags:
-        - Key: Name
-          Value: PortellaEC2Instance
+      GroupDescription: Security group for the load balancer
+      VpcId: !Ref PortellaVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '3000'
+          ToPort: '3000'
+          CidrIp: 0.0.0.0/0
 
   PortellaDynamoDBTable:
     Type: 'AWS::DynamoDB::Table'
@@ -151,3 +144,55 @@ Resources:
       Path: "/"
       Roles:
         - !Ref DynamoDBAccessRole
+
+  PortellaAutoScalingGroup:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      AvailabilityZones: !GetAZs ""
+      LaunchConfigurationName: !Ref PortellaLaunchConfiguration
+      MinSize: '1'
+      MaxSize: '5'
+      DesiredCapacity: '1'
+      TargetGroupARNs: 
+        - !Ref PortellaTargetGroup
+
+  PortellaLaunchConfiguration:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      ImageId: ami-0d4efe6f666681b4f
+      InstanceType: t2.micro
+      IamInstanceProfile: !Ref DynamoDBAccessInstanceProfile
+      KeyName: !Ref PortellaKeypair
+      SecurityGroups: 
+        - !Ref AppSecurityGroup
+
+  PortellaLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Subnets: 
+        - !Ref PortellaSubnet1
+        - !Ref PortellaSubnet2
+      SecurityGroups: 
+        - !Ref LoadBalancerSecurityGroup
+
+  PortellaTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      Port: 8000
+      Protocol: HTTP
+      VpcId: !Ref PortellaVPC
+
+  PortellaListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions: 
+        - Type: forward
+          TargetGroupArn: !Ref PortellaTargetGroup
+      LoadBalancerArn: !Ref PortellaLoadBalancer
+      Port: 3000
+      Protocol: HTTP
+
+Parameters:
+  PublicKeyMaterial:
+    Description: The public key material
+    Type: String
