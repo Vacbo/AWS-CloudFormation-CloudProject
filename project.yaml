@@ -77,14 +77,9 @@ Resources:
       VpcId: !Ref PortellaVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: '22'
-          ToPort: '22'
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
           FromPort: '8000'
           ToPort: '8000'
           SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
-
       SecurityGroupEgress:
         - IpProtocol: '-1'
           CidrIp: 0.0.0.0/0
@@ -96,8 +91,8 @@ Resources:
       VpcId: !Ref PortellaVPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: '3000'
-          ToPort: '3000'
+          FromPort: '80'
+          ToPort: '80'
           CidrIp: 0.0.0.0/0
       SecurityGroupEgress:
         - IpProtocol: '-1'
@@ -164,12 +159,13 @@ Resources:
   PortellaLaunchConfiguration:
     Type: 'AWS::AutoScaling::LaunchConfiguration'
     Properties:
-      ImageId: ami-05ffac820eba944c8
+      ImageId: ami-041a6538e0e122641
       InstanceType: t2.micro
       IamInstanceProfile: !Ref DynamoDBAccessInstanceProfile
       KeyName: !Ref PortellaKeypair
       SecurityGroups: 
         - !Ref AppSecurityGroup
+      AssociatePublicIpAddress: true
 
   PortellaLoadBalancer:
     Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
@@ -187,6 +183,13 @@ Resources:
       Port: 8000
       Protocol: HTTP
       VpcId: !Ref PortellaVPC
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: '8000'
+      HealthCheckPath: '/healthcheck'
+      HealthCheckIntervalSeconds: 300
+      HealthCheckTimeoutSeconds: 30
+      HealthyThresholdCount: 3
+      UnhealthyThresholdCount: 3
 
   PortellaListener:
     Type: 'AWS::ElasticLoadBalancingV2::Listener'
@@ -195,7 +198,7 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref PortellaTargetGroup
       LoadBalancerArn: !Ref PortellaLoadBalancer
-      Port: 3000
+      Port: 80
       Protocol: HTTP
     
   PortellaScalingPolicy:
@@ -208,8 +211,20 @@ Resources:
           PredefinedMetricType: ALBRequestCountPerTarget
           ResourceLabel: 
             !Join [ "/", [ !GetAtt PortellaLoadBalancer.LoadBalancerFullName, !GetAtt PortellaTargetGroup.TargetGroupFullName ]]
-        TargetValue: 1000.0
-
+        TargetValue: 500.0
+      
+  PortellaScalingDownPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AutoScalingGroupName: !Ref PortellaAutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ALBRequestCountPerTarget
+          ResourceLabel: 
+            !Join [ "/", [ !GetAtt PortellaLoadBalancer.LoadBalancerFullName, !GetAtt PortellaTargetGroup.TargetGroupFullName ]]
+        TargetValue: 50.0
+    
   PortellaRequestCountAlarm:
     Type: 'AWS::CloudWatch::Alarm'
     Properties:
@@ -227,38 +242,22 @@ Resources:
           Value: !GetAtt PortellaLoadBalancer.LoadBalancerFullName
       ComparisonOperator: GreaterThanThreshold
 
-
-  PortellaEC2Instance:
-    Type: 'AWS::EC2::Instance'
+  PortellaRequestCountLowAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
     Properties:
-      ImageId: ami-05ffac820eba944c8 # Replace with your AMI ID
-      InstanceType: t2.micro
-      KeyName: !Ref PortellaKeypair
-      IamInstanceProfile: !Ref DynamoDBAccessInstanceProfile
-      NetworkInterfaces:
-        - AssociatePublicIpAddress: 'true'
-          DeviceIndex: '0'
-          GroupSet:
-            - !Ref EC2PublicIPAddress
-          SubnetId: !Ref PortellaSubnet1
-
-  EC2PublicIPAddress:
-    Type: 'AWS::EC2::SecurityGroup'
-    Properties:
-      GroupDescription: Default security group for the CloudProject
-      VpcId: !Ref PortellaVPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: '22'
-          ToPort: '22'
-          CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: '8000'
-          ToPort: '8000'
-          CidrIp: 0.0.0.0/0
-      SecurityGroupEgress:
-        - IpProtocol: '-1'
-          CidrIp: 0.0.0.0/0
+      AlarmDescription: Alarm if request count is too low
+      Namespace: AWS/ApplicationELB
+      MetricName: RequestCount
+      Statistic: Sum
+      Period: '300'
+      EvaluationPeriods: '1'
+      Threshold: '50'
+      AlarmActions:
+        - !Ref PortellaScalingDownPolicy
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt PortellaLoadBalancer.LoadBalancerFullName
+      ComparisonOperator: LessThanThreshold
 
 Parameters:
   PublicKeyMaterial:
