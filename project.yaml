@@ -234,7 +234,7 @@ Resources:
       Statistic: Sum
       Period: '300'
       EvaluationPeriods: '1'
-      Threshold: '1000'
+      Threshold: '500'
       AlarmActions:
         - !Ref PortellaScalingPolicy
       Dimensions:
